@@ -1,9 +1,18 @@
-from fastapi import FastAPI, HTTPException, status, Header
+from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 import uuid
 
 app = FastAPI(title="API Biblioteca de Jogos", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class LoginRequest(BaseModel):
     email: str
@@ -31,7 +40,6 @@ class JogoResponse(BaseModel):
     nota: int
     review: str
 
-tokens_validos = set()
 jogos_db = {}
 next_id = 1
 
@@ -52,35 +60,10 @@ jogos_db[2] = {
 next_id = 3
 
 
-def validar_token(authorization: Optional[str] = Header(None)):
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token não fornecido"
-        )
-    
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Formato de token inválido"
-        )
-    
-    token = authorization.replace("Bearer ", "")
-    
-    if token not in tokens_validos:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido"
-        )
-    
-    return token
-
-
 @app.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
 async def login(credentials: LoginRequest):
     if credentials.email == "usuario@esoft.com" and credentials.password == "Abc123":
         token = str(uuid.uuid4())
-        tokens_validos.add(token)
         return LoginResponse(token=token)
     
     raise HTTPException(
@@ -90,28 +73,25 @@ async def login(credentials: LoginRequest):
 
 
 @app.get("/jogos", response_model=List[JogoResponse], status_code=status.HTTP_200_OK)
-async def listar_jogos(token: str = Header(None, alias="Authorization", convert_underscores=False)):
-    validar_token(token)
+async def listar_jogos():
     return list(jogos_db.values())
 
 
 @app.get("/jogos/{id}", response_model=JogoResponse, status_code=status.HTTP_200_OK)
-async def buscar_jogo(id: int, token: str = Header(None, alias="Authorization", convert_underscores=False)):
-    validar_token(token)
+async def buscar_jogo(id: int):
     if id not in jogos_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Jogo não encontrado"
         )
-    
+
     return jogos_db[id]
 
 
 @app.post("/jogos", response_model=JogoResponse, status_code=status.HTTP_201_CREATED)
-async def criar_jogo(jogo: JogoCreate, token: str = Header(None, alias="Authorization", convert_underscores=False)):
-    validar_token(token)
+async def criar_jogo(jogo: JogoCreate):
     global next_id
-    
+
     novo_jogo = {
         "id": next_id,
         "nome": jogo.nome,
@@ -119,22 +99,21 @@ async def criar_jogo(jogo: JogoCreate, token: str = Header(None, alias="Authoriz
         "nota": jogo.nota,
         "review": jogo.review
     }
-    
+
     jogos_db[next_id] = novo_jogo
     next_id += 1
-    
+
     return novo_jogo
 
 
 @app.put("/jogos/{id}", response_model=JogoResponse, status_code=status.HTTP_200_OK)
-async def atualizar_jogo(id: int, jogo: JogoUpdate, token: str = Header(None, alias="Authorization", convert_underscores=False)):
-    validar_token(token)
+async def atualizar_jogo(id: int, jogo: JogoUpdate):
     if id not in jogos_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Jogo não encontrado"
         )
-    
+
     jogo_atualizado = {
         "id": id,
         "nome": jogo.nome,
@@ -142,21 +121,20 @@ async def atualizar_jogo(id: int, jogo: JogoUpdate, token: str = Header(None, al
         "nota": jogo.nota,
         "review": jogo.review
     }
-    
+
     jogos_db[id] = jogo_atualizado
-    
+
     return jogo_atualizado
 
 
 @app.delete("/jogos/{id}", status_code=status.HTTP_204_NO_CONTENT)
-async def deletar_jogo(id: int, token: str = Header(None, alias="Authorization", convert_underscores=False)):
-    validar_token(token)
+async def deletar_jogo(id: int):
     if id not in jogos_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Jogo não encontrado"
         )
-    
+
     del jogos_db[id]
-    
+
     return None
